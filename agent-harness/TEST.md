@@ -14,11 +14,12 @@ E2E layers are gated on `BOOKFETCH_E2E=1` locally; they are mandatory in release
 cd agent-harness
 python -m unittest discover -s cli_anything/bookfetch/tests -p "test_core.py" -v
 BOOKFETCH_E2E=1 python -m unittest discover -s cli_anything/bookfetch/tests -p "test_*.py" -v
+python scripts/smoke_test.py        # one-command live check (for humans and agents)
 ```
 
 ## Evidence (recorded 2026-11-10, machine: Windows 11, Python 3.14)
 
-### Unit — 31 passed, 0 failed
+### Unit — 33 passed, 0 failed
 
 | Area | Proof |
 |---|---|

@@ -25,7 +25,14 @@ class McpToolE2E(unittest.TestCase):
         j = _ok(mcp_server.search_books("Dune", author="Frank Herbert", limit=5))
         cands = j["data"]["candidates"]
         self.assertGreater(len(cands), 0)
-        self.assertTrue(any(c["ref"] == HERBERT_MD5 for c in cands))
+        # The live catalog rotates rows; assert structure + author coverage,
+        # never a pinned md5 (the --id download tests cover a pinned ref).
+        for c in cands:
+            self.assertRegex(c["ref"], r"[a-f0-9]{32}")
+        self.assertTrue(
+            any("herbert" in " ".join(c["authors"]).lower() for c in cands),
+            "author-targeted search should surface Herbert rows",
+        )
 
     def test_get_book_by_id(self):
         from cli_anything.bookfetch import mcp_server
