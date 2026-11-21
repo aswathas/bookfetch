@@ -1,6 +1,9 @@
 """bookfetch MCP server (stdio) — the agent-facing frontend.
 
-Tools: search_books, get_book, book_info, sources_status.
+Tools: bookfetch_code (code mode), sources_status.
+search_books / get_book / book_info stay as plain Python functions (still used
+by the tests and the CLI-facing behaviour) but are no longer registered as MCP
+tools: code mode covers them and their schemas cost context every session.
 Errors come back as {"ok": false, "error": {code, message, hint}} with the same
 codes as the CLI exit table, so agents can reason about them identically.
 """
@@ -8,15 +11,22 @@ codes as the CLI exit table, so agents can reason about them identically.
 from __future__ import annotations
 
 import json
+import os
 
 from mcp.server.fastmcp import FastMCP
 
 from . import __version__
+from .code_mode import run_code
 from .core.engine import Engine
 from .core.errors import CliAnythingError
 from .core.registry import default_registry
 
 mcp = FastMCP("bookfetch")
+
+_TRANSPORT = os.environ.get("BOOKFETCH_MCP_TRANSPORT", "stdio").strip().lower()
+# Code mode runs caller-supplied Python. It is only offered on the local stdio
+# transport; an HTTP server would expose code execution to the network.
+CODE_MODE_OK = _TRANSPORT not in ("http", "streamable-http", "streamable_http")
 
 
 def _result(data, warnings=None) -> str:
@@ -32,7 +42,6 @@ def _error(exc: CliAnythingError) -> str:
     )
 
 
-@mcp.tool()
 def search_books(query: str, author: str = "", year: str = "", limit: int = 10) -> str:
     """Search book sources for a title. Returns ranked candidates, each with a stable 'ref'
     (libgen md5, openlibrary key, gutenberg id, or standard-ebooks slug). The first source
@@ -58,7 +67,6 @@ def search_books(query: str, author: str = "", year: str = "", limit: int = 10) 
         return _error(exc)
 
 
-@mcp.tool()
 def get_book(
     query: str = "",
     id: str = "",
@@ -97,7 +105,6 @@ def get_book(
         return _error(exc)
 
 
-@mcp.tool()
 def book_info(id: str, source: str = "", query: str = "") -> str:
     """Full metadata for one book: pass its ref (id). For non-libgen sources, also pass
     query (the title) so the ref can be located in that source's search results."""
@@ -122,8 +129,70 @@ def sources_status() -> str:
     )
 
 
+if CODE_MODE_OK:
+
+    @mcp.tool()
+    def bookfetch_code(code: str) -> str:
+        """Run Python against the bookfetch engine. Only what the script prints is returned.
+
+        The script runs in a sandboxed subprocess: separate process, temporary working
+        directory, allow-listed environment (no API keys), 60 second timeout, killed
+        process group on timeout. Network access is needed to reach the book sources.
+
+        Preloaded names:
+          bookfetch  - Engine instance
+            bookfetch.search(query, author=None, year=None, limit=10)
+                -> (candidates, failures). Candidate fields: source, ref, title,
+                   authors, year, language, pages, formats, mirrors, detail_url.
+            bookfetch.get(query=None, ref=None, source=None, author=None, year=None,
+                          fmt=None, dry_run=False, out_dir=None)
+                -> DownloadResult: path, source, ref, format, size, title, authors,
+                   year, verified, skipped, warnings.
+            bookfetch.book_info(ref=None, source=None, query=None) -> Candidate.
+          sources    - Registry of book sources; sources.status() -> [{name, state, note}].
+
+        Printing is the only thing that costs context, so print exactly the fields you
+        need and nothing else.
+
+        Example:
+            cands, fails = bookfetch.search("dune", author="Frank Herbert")
+            for c in cands:
+                print(c.ref, c.title, c.year, c.formats)
+        """
+        res = run_code(code)
+        parts = []
+        if res["stdout"].strip():
+            parts.append(res["stdout"].rstrip())
+        if res["timed_out"]:
+            parts.append("[timeout] script ran past 60s and was killed")
+        if res["stderr"].strip():
+            parts.append("[stderr]\n" + res["stderr"].rstrip())
+        if not parts:
+            parts.append(f"[no output] exit code {res['exit_code']}")
+        return "\n".join(parts)
+
+
 def main():
-    mcp.run()
+    """Run the server. Default is stdio (the parent process drives it).
+
+    Set BOOKFETCH_MCP_TRANSPORT=streamable-http to serve HTTP instead, using
+    BOOKFETCH_MCP_HOST (default 127.0.0.1) and BOOKFETCH_MCP_PORT (default 8931).
+    """
+    transport = os.environ.get("BOOKFETCH_MCP_TRANSPORT", "stdio").strip().lower()
+    if transport not in ("http", "streamable-http", "streamable_http"):
+        mcp.run()
+        return
+
+    host = os.environ.get("BOOKFETCH_MCP_HOST", "127.0.0.1").strip() or "127.0.0.1"
+    mcp.settings.host = host
+    mcp.settings.port = int(os.environ.get("BOOKFETCH_MCP_PORT", "8931"))
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        from mcp.server.transport_security import TransportSecuritySettings
+
+        mcp.settings.transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=False
+        )
+    mcp.run(transport="streamable-http")
 
 
 if __name__ == "__main__":

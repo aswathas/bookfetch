@@ -232,3 +232,20 @@ Bare invocation → REPL (scaffold repl_skin). `get --dry-run` prints the resolv
   (year omitted if unknown), Windows-illegal chars stripped.
 - Session file `~/.cli-anything/bookfetch/session.json` (scaffold default).
 - Standard Ebooks treated as `degraded` by default (SSL flake observed) but attempted last.
+
+## Code mode (added 2026-11-21)
+
+The MCP server exposes one code tool instead of three plain search/download
+tools. `bookfetch_code(code)` runs the caller's Python with the engine
+preloaded and returns only what the script prints, so a search costs the fields
+asked for rather than the whole catalogue. `sources_status` stays a plain tool
+as a fallback.
+
+Shape: separate process, temporary working directory, allow-listed environment
+(no API keys), 60 second timeout, process group killed on timeout, output capped
+at 20000 characters. The tool is registered only on the stdio transport — served
+over HTTP, the server offers the plain tools only, because code execution over
+a network is a different risk than code execution on your own machine.
+
+Measured live on the "dune" search: schema 3192 -> 2220 bytes per session,
+result 17660 -> 44 bytes. Decision record: `docs/reviews/decision-log.md` (D2–D4).

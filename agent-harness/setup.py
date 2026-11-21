@@ -12,10 +12,9 @@ setup(
             "tests/fixtures/*",
         ]
     },
-    install_requires=["click>=8.1", "mcp>=1.2", "PyYAML>=6.0"],
+    install_requires=["click>=8.1", "mcp>=1.2,<2", "PyYAML>=6.0"],
     entry_points={
         "console_scripts": [
-            "cli-anything-bookfetch=cli_anything.bookfetch.bookfetch_cli:main",
             "bookfetch-mcp=cli_anything.bookfetch.mcp_server:main",
         ]
     },
