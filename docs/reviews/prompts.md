@@ -62,3 +62,11 @@ The prompts that shaped this work, verbatim, and what each produced.
 - Prompt: "i can understand taht we dont have official anthropic code mode , but lets crate our own code mode use /ultracave"
 - Decision it produced: D2, and the brainstorming skill ran to settle the design before any code.
 - Work it caused: the design in `bookfetch-code-mode.md`; the build that followed.
+
+- Prompt: "run pototemod mode serparete l analyse and test this , for now lets test our bookfetch myself , lets download this essential for ai mathematics book by oreily"
+- Decision it produced: D6 — the code tool's timeout became an argument after the live test killed a 17 MB download twice.
+- Work it caused: `bookfetch_code` gained `timeout`; bounded the post-kill `communicate()`; the child inserts the package root on `sys.path`; over-long output is marked as truncated; commit `5fdd711`. Both requested subagents died on gateway ENOTFOUND, so the test was run directly against the live MCP server.
+
+- Prompt: "test the code mode adn"
+- Decision it produced: none — a test request.
+- Work it caused: the code-mode test matrix (environment, cwd, stdout, stderr, timeout, truncation, no-output, temp cwd, child process spawn) run through the MCP protocol.
