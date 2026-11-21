@@ -60,3 +60,26 @@ One entry per real choice. Oldest first.
 - Chosen: keep only `bookfetch-mcp`. The CLI module and its tests stay; the README documents the module invocation.
 - Evidence: `setup.py` diff shows one console script; README CLI section rewritten to `python -m ...`.
 - Consequence: `pip install` no longer puts `cli-anything-bookfetch` on PATH.
+
+## D6 — The code tool's timeout is a parameter, not a constant
+- Date: 2026-11-21
+- Prompt: "run pototemod mode serparete l analyse and test this , for now lets test our bookfetch myself , lets download this essential for ai mathematics book by oreily"
+- Context: the live test downloaded a 3.4 MB PDF in 45 s through code mode, but the 17 MB Mathematics for Machine Learning PDF was killed by the fixed 60 s wall, twice, once at 60 s and once at 300 s.
+- Options:
+  - Keep the fixed 60 s wall — a large book can never be fetched through the tool, which is the tool's main use.
+  - Raise the wall to a large constant — still wrong for a slow mirror, and the caller still cannot choose.
+  - Make the timeout an argument, clamped to 10–600 s — the caller pays for the wait it actually needs, and the cap keeps one call from hanging the server.
+- Chosen: the argument. Default stays 60 s so a runaway script still dies quickly; a download can ask for up to 600 s.
+- Evidence: live MCP call `bookfetch_code(code=..., timeout=600)`; a 3.4 MB PDF verified (`%PDF-1.5`, 3444468 bytes) through the tool with the default timeout.
+- Consequence: the tool schema grew by 116 bytes (1823 bytes total).
+
+## D7 — The sandbox fence limits the environment, not the filesystem
+- Date: 2026-11-21
+- Prompt: "but am going to run everything local only?"
+- Context: review of the fence found that the allow-listed environment stops the child reading API keys from the environment, but the child still runs as this user and can read any file this user can read, including `~/.aws`, SSH keys and browser profiles.
+- Options:
+  - Claim the sandbox is a security boundary — it is not, and saying so would be wrong.
+  - Say it plainly in the tool docstring, which is what the agent reads before writing code — the honest place for the limit.
+- Chosen: state the limit in the tool docstring. The engine's own download path is unchanged; the tool is for local use only.
+- Evidence: the docstring now says the fence limits what the environment leaks, not what the filesystem holds, and says to treat book-source strings as data.
+- Consequence: a caller who pastes untrusted text into the tool is the weak point, not the network.

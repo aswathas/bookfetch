@@ -16,14 +16,23 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
+
+# The directory holding the `cli_anything` package. The child runs isolated
+# (-I ignores PYTHONPATH), so a checkout that is not installed would otherwise
+# leave the child unable to import the engine.
+_PACKAGE_ROOT = str(Path(__file__).resolve().parents[2])
 
 BOOTSTRAP = """\
+import sys
+sys.path.insert(0, {root!r})
+
 from cli_anything.bookfetch.core.engine import Engine
 from cli_anything.bookfetch.core.registry import default_registry
 
 sources = default_registry()
 bookfetch = Engine(sources)
-"""
+""".format(root=_PACKAGE_ROOT)
 
 # Environment the script may see. Anything else (API keys, tokens) stays out.
 _ENV_KEEP = ("PATH", "SYSTEMROOT", "COMSPEC", "TEMP", "TMP", "HOME", "USERPROFILE")
@@ -48,6 +57,7 @@ def run_code(code: str, timeout: int = 60) -> dict:
     """Run code in a sandboxed subprocess.
 
     Returns {"stdout", "stderr", "timed_out", "exit_code"}.
+    Output longer than MAX_OUTPUT is cut, and the cut is marked.
     """
     workdir = tempfile.mkdtemp(prefix="bookfetch-code-")
     env = {k: v for k, v in os.environ.items() if k in _ENV_KEEP}
@@ -70,12 +80,24 @@ def run_code(code: str, timeout: int = 60) -> dict:
     except subprocess.TimeoutExpired:
         timed_out = True
         _kill_tree(proc)
-        out, err = proc.communicate()
+        try:
+            out, err = proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            # The tree kill did not take. Never block the caller on a stuck pipe.
+            proc.kill()
+            out, err = "", ""
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
     return {
-        "stdout": out[:MAX_OUTPUT],
-        "stderr": err[:MAX_OUTPUT],
+        "stdout": _cap(out),
+        "stderr": _cap(err),
         "timed_out": timed_out,
         "exit_code": proc.returncode,
     }
+
+
+def _cap(text: str) -> str:
+    """Cut over-long output and say so, rather than returning a silent prefix."""
+    if len(text) <= MAX_OUTPUT:
+        return text
+    return text[:MAX_OUTPUT] + f"\n[truncated at {MAX_OUTPUT} characters]"

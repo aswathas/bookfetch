@@ -16,3 +16,10 @@ One row per changed file.
 | `BUILDLOG.md` | New: what shipped when and where | Commit discipline requires the build log | Read-back |
 | `docs/design/2026-11-10-bookfetch-design.md` | Added a code-mode section | The design doc would otherwise not describe the shipped frontend | Read-back |
 | `C:\Users\ADMIN\.claude.json` (outside the repo) | The `bookfetch` MCP entry now runs `python.exe -m cli_anything.bookfetch.mcp_server`; the previous path was quadruple-escaped and pointed at a console script that did not exist | The MCP server refused to start (`CONNECTION_CLOSED`) | `claude mcp list` -> bookfetch Connected; `initialize` -> `bookfetch 1.30.0` |
+
+## Follow-up: live test round (2026-11-21)
+
+| File | What changed | Why | How tested |
+|---|---|---|---|
+| `agent-harness/cli_anything/bookfetch/mcp_server.py` | `bookfetch_code` gained a `timeout` argument, clamped to 10–600 s; the timeout message reports the actual limit | A 17 MB download was killed by the fixed 60 s wall during the live test | Live MCP call with `timeout=600`; a 3.4 MB PDF downloaded and verified in 45 s with the default |
+| `agent-harness/cli_anything/bookfetch/code_mode.py` | After the process-group kill, `communicate()` is bounded by 10 s and falls back to `proc.kill()`; the child inserts the package root on `sys.path`; over-long output is cut with a `[truncated at N characters]` marker | A failed tree kill could block the caller forever with no answer; `-I` ignores `PYTHONPATH`, so a checkout that is not installed could leave the child unable to import the engine; a silent prefix looks like complete output | `python -m unittest discover` -> 49 pass, 11 skipped |
