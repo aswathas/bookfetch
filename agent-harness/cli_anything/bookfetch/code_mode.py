@@ -5,7 +5,9 @@ and the source registry as `sources`. Only what the script prints comes back, so
 the caller pays for the fields it asked for instead of the whole catalogue.
 
 Sandbox: separate process, temporary working directory, allow-listed
-environment (no API keys), hard timeout, process group killed on timeout.
+environment (no API keys), hard timeout, process group killed on timeout,
+stdin closed (the parent's stdin is the MCP protocol pipe; a child reading it
+would hang, and could corrupt the stream).
 Downloads still happen, but only where the script asks (out_dir).
 """
 
@@ -70,6 +72,7 @@ def run_code(code: str, timeout: int = 60) -> dict:
     proc = subprocess.Popen(
         [sys.executable, "-I", "-c", BOOTSTRAP + code],
         cwd=workdir, env=env,
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, encoding="utf-8", errors="replace",
         **kwargs,

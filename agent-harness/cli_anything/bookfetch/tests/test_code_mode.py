@@ -34,6 +34,18 @@ class SandboxTest(unittest.TestCase):
         self.assertTrue(workdir.endswith("bookfetch-code-") or "bookfetch-code-" in workdir)
         self.assertFalse(Path(workdir).exists())
 
+    def test_child_stdin_is_closed(self):
+        # The parent's stdin is the MCP protocol pipe. A child that inherits it
+        # hangs on it, and a child that reads it could corrupt the stream.
+        res = run_code("import sys; print('stdin isatty', sys.stdin.isatty())\n"
+                       "try:\n"
+                       "    data = sys.stdin.read()\n"
+                       "    print('read', len(data))\n"
+                       "except Exception as e:\n"
+                       "    print('read failed', type(e).__name__)\n")
+        self.assertIn("read 0", res["stdout"])
+        self.assertNotIn("timeout", res["stdout"])
+
     def test_timeout_kills_the_script(self):
         res = run_code("while True:\n    pass\n", timeout=5)
         self.assertTrue(res["timed_out"])

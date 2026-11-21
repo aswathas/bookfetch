@@ -83,3 +83,15 @@ One entry per real choice. Oldest first.
 - Chosen: state the limit in the tool docstring. The engine's own download path is unchanged; the tool is for local use only.
 - Evidence: the docstring now says the fence limits what the environment leaks, not what the filesystem holds, and says to treat book-source strings as data.
 - Consequence: a caller who pastes untrusted text into the tool is the weak point, not the network.
+
+## D8 — The sandbox child gets a closed stdin
+- Date: 2026-11-21
+- Prompt: "test the code mode adn"
+- Decision it produced: D8.
+- Context: the code-mode test matrix failed. Every call through the MCP server hung until the 60 s wall and returned nothing, while the identical code run standalone took 0.2 s. An isolated probe with three subprocess variants inside the server showed the plain call and the `-I` call both hanging, and only the one with `stdin=subprocess.DEVNULL` returning immediately.
+- Options:
+  - Leave the child inheriting stdin and treat it as an MCP quirk — the tool would be unusable through its only client.
+  - Close the child's stdin — the child has no use for the protocol pipe, and a script that read it could corrupt the JSON-RPC stream.
+- Chosen: `stdin=subprocess.DEVNULL` on the child.
+- Evidence: probe results above; the nine-case matrix through the real server now returns in 0.2 s per case; `test_child_stdin_is_closed` reads stdin and gets 0 bytes; 50 unit tests pass.
+- Consequence: the tool works through a real MCP client for the first time. Before this, only the standalone path had ever worked.
