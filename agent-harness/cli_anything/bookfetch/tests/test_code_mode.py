@@ -2,6 +2,7 @@
 
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -45,6 +46,25 @@ class SandboxTest(unittest.TestCase):
                        "    print('read failed', type(e).__name__)\n")
         self.assertIn("read 0", res["stdout"])
         self.assertNotIn("timeout", res["stdout"])
+
+    def test_exit_code_is_reported(self):
+        res = run_code("import sys; print('partial'); sys.exit(3)")
+        self.assertEqual(res["exit_code"], 3)
+        self.assertIn("partial", res["stdout"])
+
+    def test_background_descendant_does_not_survive(self):
+        # The script exits but leaves a child holding the output pipe. The
+        # output must still arrive, and the descendant must be swept.
+        before = set(Path(tempfile.gettempdir()).glob("bookfetch-code-*"))
+        res = run_code(
+            "import subprocess, sys\n"
+            "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+            "print('PARENT-DONE')\n",
+            timeout=20,
+        )
+        self.assertIn("PARENT-DONE", res["stdout"])
+        after = set(Path(tempfile.gettempdir()).glob("bookfetch-code-*"))
+        self.assertEqual(after - before, set(), "workdir leaked")
 
     def test_timeout_kills_the_script(self):
         res = run_code("while True:\n    pass\n", timeout=5)

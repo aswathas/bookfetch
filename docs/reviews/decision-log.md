@@ -95,3 +95,38 @@ One entry per real choice. Oldest first.
 - Chosen: `stdin=subprocess.DEVNULL` on the child.
 - Evidence: probe results above; the nine-case matrix through the real server now returns in 0.2 s per case; `test_child_stdin_is_closed` reads stdin and gets 0 bytes; 50 unit tests pass.
 - Consequence: the tool works through a real MCP client for the first time. Before this, only the standalone path had ever worked.
+
+## D9 — The sandbox uses a Windows Job Object, not a PID walk
+- Date: 2026-11-21
+- Prompt: "test the code mode adn" (the second-opinion review reported ten findings)
+- Context: the review found that killing the process tree by PID does not reach descendants whose own parent already exited, and that Windows' CIM `ParentProcessId` filter does not find them either, so a script could leave a background process running past the call. A supervisor process was tried first and did not close the gap. A Windows Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` does: every descendant dies when the job handle closes.
+- Options:
+  - Sweep orphans by parent PID through PowerShell — does not work, the CIM filter does not match a reparented orphan.
+  - Supervisor process that outlives the script — the supervisor's own children still survive it.
+  - Job Object — one handle, every descendant dies, works whether the script exits early or is killed.
+- Chosen: the Job Object, with `taskkill /T` kept as the timeout path and POSIX using a process group.
+- Evidence: `AssignProcessToJobObject` returns True on this box; a child placed in the job is dead after the handle closes; `test_background_descendant_does_not_survive` passes and no `bookfetch-code-*` directory leaks.
+- Consequence: a script can no longer outlive the call by spawning a background process.
+
+## D10 — The code tool refuses at call time unless the server was started on stdio
+- Date: 2026-11-21
+- Prompt: "test the code mode adn"
+- Context: the HTTP guard read `BOOKFETCH_MCP_TRANSPORT` at import time, but the transport is chosen when the server runs. A launcher that sets the transport at run time (`fastmcp run ... --transport http`) would have served code execution over HTTP with no authentication.
+- Options:
+  - Keep the import-time check — the guard and the decision can disagree.
+  - Move the check to call time — the tool is always registered but refuses unless the server was started by `main()` on stdio.
+  - Drop the guard — no.
+- Chosen: the call-time check. `main()` sets the flag when it serves stdio; any other launcher leaves it unset and the tool refuses.
+- Evidence: with `BOOKFETCH_MCP_TRANSPORT=streamable-http` the tool is not registered at all; calling the tool on a server that was not started on stdio returns `[refused] code mode runs only on the local stdio transport`.
+- Consequence: the guard follows the transport actually in use.
+
+## D11 — The tool's own docstring no longer claims the environment is safe
+- Date: 2026-11-21
+- Prompt: "test the code mode adn"
+- Context: the review showed `HOME` and `USERPROFILE` stay in the child environment and the filesystem is not fenced, so a script can read `~/.claude/.credentials.json` and print it into the agent's context. The docstring said "allow-listed environment (no API keys)", which reads as a guarantee the fence does not give.
+- Options:
+  - Fence the filesystem — the child needs to read the book sources and write downloads, and the same user can read those files from anywhere.
+  - Drop the misleading claim — the environment allow-list stops secrets in environment variables from being handed over; it is not a filesystem boundary.
+- Chosen: the honest wording. The docstring now says the fence limits what the environment leaks, not what the filesystem holds, and says the script can read any file this user can read.
+- Evidence: the docstring text in `mcp_server.py` and the module docstring in `code_mode.py`.
+- Consequence: a caller who puts a secret in the code, or lets untrusted book metadata steer the code, is the weak point. Both are now named in the tool's own description, where the agent reads them before writing code.
