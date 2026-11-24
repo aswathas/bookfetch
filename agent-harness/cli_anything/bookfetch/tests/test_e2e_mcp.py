@@ -57,6 +57,18 @@ class McpToolE2E(unittest.TestCase):
         names = {s["name"] for s in j["data"]["sources"]}
         self.assertEqual(names, {"libgen", "openlibrary", "gutenberg", "standardebooks", "annasarchive"})
 
+    def test_bookfetch_code(self):
+        from cli_anything.bookfetch import mcp_server
+
+        out = mcp_server.bookfetch_code(
+            'cands, _ = bookfetch.search("dune", limit=3)\n'
+            'for c in cands:\n'
+            '    print(c.ref, "|", c.title)\n'
+        )
+        self.assertNotIn("[timeout]", out)
+        self.assertNotIn("[no output]", out)
+        self.assertIn("|", out)
+
     def test_book_info(self):
         from cli_anything.bookfetch import mcp_server
 
@@ -86,8 +98,10 @@ class McpStdioHandshake(unittest.TestCase):
                     return [t.name for t in tools.tools]
 
         names = asyncio.run(run())
-        for n in ("search_books", "get_book", "book_info", "sources_status"):
+        for n in ("bookfetch_code", "sources_status"):
             self.assertIn(n, names)
+        for n in ("search_books", "get_book", "book_info"):
+            self.assertNotIn(n, names)
 
 
 if __name__ == "__main__":

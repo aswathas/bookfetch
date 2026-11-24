@@ -3,7 +3,7 @@
 Ask for any book by name, get a **verified file on disk**. One pip package, two frontends over a shared core:
 
 - **MCP server** — `bookfetch-mcp` (stdio), for Claude Desktop / AI chat agents
-- **CLI** — `cli-anything-bookfetch`, for CLI agents and humans (REPL on bare invocation)
+- **CLI** — `python -m cli_anything.bookfetch.bookfetch_cli`, for CLI agents and humans (REPL on bare invocation)
 
 Sources in failover order: **libgen.li** (primary, with mirror-domain failover) →
 **Open Library / archive.org** → **Project Gutenberg** → **Standard Ebooks** →
@@ -19,15 +19,18 @@ pip install -e .        # or: pip install cli-anything-bookfetch
 ## CLI
 
 ```bash
-cli-anything-bookfetch                              # REPL
-cli-anything-bookfetch --json search "Dune" --author "Frank Herbert"
-cli-anything-bookfetch --json get --id <ref>        # deterministic download
-cli-anything-bookfetch get "Dune" --author "Frank Herbert" --format epub
-cli-anything-bookfetch get "Dune" --author "Frank Herbert" --dry-run
-cli-anything-bookfetch --json info <ref>
-cli-anything-bookfetch --json sources [check]
-cli-anything-bookfetch history | undo | redo
+python -m cli_anything.bookfetch.bookfetch_cli                              # REPL
+python -m cli_anything.bookfetch.bookfetch_cli --json search "Dune" --author "Frank Herbert"
+python -m cli_anything.bookfetch.bookfetch_cli --json get --id <ref>        # deterministic download
+python -m cli_anything.bookfetch.bookfetch_cli get "Dune" --author "Frank Herbert" --format epub
+python -m cli_anything.bookfetch.bookfetch_cli get "Dune" --author "Frank Herbert" --dry-run
+python -m cli_anything.bookfetch.bookfetch_cli --json info <ref>
+python -m cli_anything.bookfetch.bookfetch_cli --json sources [check]
+python -m cli_anything.bookfetch.bookfetch_cli history | undo | redo
 ```
+
+Only the MCP entry point is installed by `setup.py` (`bookfetch-mcp`); the CLI
+runs as a module.
 
 `--json` on every data command. Every command works one-shot; nothing prompts in one-shot mode.
 `--author` is a **hard constraint**: candidates with no author match are disqualified, so a
@@ -44,9 +47,26 @@ candidate list and download nothing — retry with `get --id <ref>`.
 }
 ```
 
-Tools: `search_books(query, author?, year?, limit?)`, `get_book(query? | id?, source?, author?, year?, format?, out_dir?, dry_run?)`,
-`book_info(id, source?, query?)`, `sources_status()`. Errors return
-`{"ok": false, "error": {code, message, hint}}` with the same codes as the CLI.
+Tools: `bookfetch_code(code)`, `sources_status()`.
+
+`bookfetch_code` runs Python against the same engine and returns only what the
+script prints, so a search costs the fields you asked for instead of the whole
+catalogue. The script gets `bookfetch` (the Engine) and `sources` (the Registry)
+preloaded:
+
+```python
+cands, fails = bookfetch.search("dune", author="Frank Herbert")
+for c in cands:
+    print(c.ref, c.title, c.year, c.formats)
+```
+
+The script runs in a sandboxed subprocess: separate process, temporary working
+directory, allow-listed environment (no API keys), 60 second timeout, process
+group killed on timeout. Code mode is offered on the local stdio transport only
+and is not registered when the server is served over HTTP.
+
+`search_books`, `get_book` and `book_info` remain as plain Python functions in
+`mcp_server.py` (used by the tests) but are not registered as MCP tools.
 
 ## JSON envelope / exit codes
 
